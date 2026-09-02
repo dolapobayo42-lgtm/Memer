@@ -14,7 +14,14 @@ import asyncio
 import json
 import os
 import time
-import requests
+try:
+    import requests
+except Exception:
+    # Defer graceful handling to send_telegram so the process can still run
+    # when requests isn't installed (e.g., Telegram not configured in this
+    # container). We still add requirements.txt so containers can opt-in to
+    # install it.
+    requests = None
 import websockets
 
 import journal
@@ -34,6 +41,13 @@ def send_telegram(text: str, timeout: int = 10) -> bool:
         print("[telegram] Not configured -- printing instead:")
         print(text)
         return False
+    if requests is None:
+        # If requests isn't available, fall back to printing rather than
+        # crashing at import time. This keeps the service running for
+        # environments that don't need Telegram alerts.
+        print("[telegram] 'requests' package not installed; printing instead:")
+        print(text)
+        return False
     try:
         resp = requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
@@ -41,7 +55,9 @@ def send_telegram(text: str, timeout: int = 10) -> bool:
             timeout=timeout,
         )
         return resp.ok
-    except requests.RequestException as e:
+    except Exception as e:
+        # Use a broad Exception here because requests may not be the exception
+        # type on some failures, and we already guard against requests missing.
         print(f"[telegram] Send failed: {e}")
         return False
 
@@ -199,4 +215,3 @@ def run_stage1_and_birdeye_cycle():
                     f"-- watch-only, no trade placed. This is a rare event by design."
                 )
                 send_telegram(alert)
-
