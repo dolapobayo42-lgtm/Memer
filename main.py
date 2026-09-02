@@ -14,21 +14,8 @@ import asyncio
 import json
 import os
 import time
-try:
-    import requests
-except Exception:
-    # Defer graceful handling to send_telegram so the process can still run
-    # when requests isn't installed (e.g., Telegram not configured in this
-    # container). We still add requirements.txt so containers can opt-in to
-    # install it.
-    requests = None
-try:
-    import websockets
-except Exception:
-    # If websockets isn't installed, we disable the live listener rather
-    # than crashing at import time. The rest of the background checks can
-    # still run.
-    websockets = None
+import requests
+import websockets
 
 import journal
 import dexscreener_client as dex
@@ -47,13 +34,6 @@ def send_telegram(text: str, timeout: int = 10) -> bool:
         print("[telegram] Not configured -- printing instead:")
         print(text)
         return False
-    if requests is None:
-        # If requests isn't available, fall back to printing rather than
-        # crashing at import time. This keeps the service running for
-        # environments that don't need Telegram alerts.
-        print("[telegram] 'requests' package not installed; printing instead:")
-        print(text)
-        return False
     try:
         resp = requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
@@ -61,9 +41,7 @@ def send_telegram(text: str, timeout: int = 10) -> bool:
             timeout=timeout,
         )
         return resp.ok
-    except Exception as e:
-        # Use a broad Exception here because requests may not be the exception
-        # type on some failures, and we already guard against requests missing.
+    except requests.RequestException as e:
         print(f"[telegram] Send failed: {e}")
         return False
 
@@ -113,12 +91,6 @@ async def listen_for_launches():
     """Long-running WebSocket listener. Reconnects with backoff on failure --
     important per PumpPortal's own docs: don't hammer new connections, reuse
     one persistent connection."""
-    if websockets is None:
-        # Defensive guard in case this function is accidentally called even
-        # though the import failed earlier.
-        print("[listener] 'websockets' package not installed; listener disabled.")
-        return
-
     backoff = 1
     while True:
         try:
@@ -171,28 +143,6 @@ async def periodic_stage1_birdeye_checker():
                                        # gate controls actual check timing
 
 
-async def main():
-    print("=" * 50)
-    print("Deployer Reputation Tracker -- starting")
-    print(f"Journal path: {os.path.abspath(journal.JOURNAL_PATH)}")
-    print("=" * 50)
-
-    # Build the task list dynamically so missing optional packages don't
-    # cause import-time crashes; if websockets is missing we skip the
-    # listener and keep the background cycles running.
-    tasks = [periodic_liquidity_checker(), periodic_stage1_birdeye_checker()]
-    if websockets is not None:
-        tasks.insert(0, listen_for_launches())
-    else:
-        print("[main] 'websockets' package not installed; WebSocket listener disabled.")
-
-    await asyncio.gather(*tasks)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
-
-
 def run_stage1_and_birdeye_cycle():
     """
     The two-stage filter: Stage 1 is free (DexScreener, ~15min wait) and cuts
@@ -233,3 +183,19 @@ def run_stage1_and_birdeye_cycle():
                     f"-- watch-only, no trade placed. This is a rare event by design."
                 )
                 send_telegram(alert)
+
+
+async def main():
+    print("=" * 50)
+    print("Deployer Reputation Tracker -- starting")
+    print(f"Journal path: {os.path.abspath(journal.JOURNAL_PATH)}")
+    print("=" * 50)
+    await asyncio.gather(
+        listen_for_launches(),
+        periodic_liquidity_checker(),
+        periodic_stage1_birdeye_checker(),
+    )
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
