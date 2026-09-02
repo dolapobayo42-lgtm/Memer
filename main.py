@@ -22,7 +22,13 @@ except Exception:
     # container). We still add requirements.txt so containers can opt-in to
     # install it.
     requests = None
-import websockets
+try:
+    import websockets
+except Exception:
+    # If websockets isn't installed, we disable the live listener rather
+    # than crashing at import time. The rest of the background checks can
+    # still run.
+    websockets = None
 
 import journal
 import dexscreener_client as dex
@@ -107,6 +113,12 @@ async def listen_for_launches():
     """Long-running WebSocket listener. Reconnects with backoff on failure --
     important per PumpPortal's own docs: don't hammer new connections, reuse
     one persistent connection."""
+    if websockets is None:
+        # Defensive guard in case this function is accidentally called even
+        # though the import failed earlier.
+        print("[listener] 'websockets' package not installed; listener disabled.")
+        return
+
     backoff = 1
     while True:
         try:
@@ -164,11 +176,17 @@ async def main():
     print("Deployer Reputation Tracker -- starting")
     print(f"Journal path: {os.path.abspath(journal.JOURNAL_PATH)}")
     print("=" * 50)
-    await asyncio.gather(
-        listen_for_launches(),
-        periodic_liquidity_checker(),
-        periodic_stage1_birdeye_checker(),
-    )
+
+    # Build the task list dynamically so missing optional packages don't
+    # cause import-time crashes; if websockets is missing we skip the
+    # listener and keep the background cycles running.
+    tasks = [periodic_liquidity_checker(), periodic_stage1_birdeye_checker()]
+    if websockets is not None:
+        tasks.insert(0, listen_for_launches())
+    else:
+        print("[main] 'websockets' package not installed; WebSocket listener disabled.")
+
+    await asyncio.gather(*tasks)
 
 
 if __name__ == "__main__":
