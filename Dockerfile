@@ -13,11 +13,16 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application source and run
+# Copy application source
 COPY . .
 
-# Use a non-root user for safety (optional but recommended)
-RUN useradd -m appuser || true
+# Create a non-root user and ensure runtime directories are writable
+RUN useradd -m appuser || true \
+    && mkdir -p /data \
+    && chown -R appuser:appuser /app /data
+
+# Switch to the non-root user
 USER appuser
 
+# Run the application
 CMD ["python", "main.py"]
