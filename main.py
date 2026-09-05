@@ -18,19 +18,41 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 
 def send_telegram(text: str, timeout: int = 10) -> bool:
+    print(f"[telegram] Attempting to send message...")
+    print(f"[telegram] Token present: {bool(TELEGRAM_BOT_TOKEN)}")
+    print(f"[telegram] Chat ID present: {bool(TELEGRAM_CHAT_ID)}")
+    
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("[telegram] Not configured -- printing instead:")
+        print("[telegram] ❌ NOT CONFIGURED -- token or chat_id is empty/missing")
+        print(f"[telegram] Token value: {TELEGRAM_BOT_TOKEN[:10]}..." if TELEGRAM_BOT_TOKEN else "[telegram] Token value: EMPTY")
+        print(f"[telegram] Chat ID value: {TELEGRAM_CHAT_ID if TELEGRAM_CHAT_ID else 'EMPTY'}")
+        print("[telegram] Printing message instead:")
         print(text)
         return False
     try:
-        resp = requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": text},
-            timeout=timeout,
-        )
-        return resp.ok
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
+        print(f"[telegram] POST to: {url}")
+        print(f"[telegram] Payload chat_id: {TELEGRAM_CHAT_ID}")
+        print(f"[telegram] Message length: {len(text)} chars")
+        
+        resp = requests.post(url, json=payload, timeout=timeout)
+        
+        print(f"[telegram] Response status: {resp.status_code}")
+        print(f"[telegram] Response text: {resp.text}")
+        
+        if resp.ok:
+            print("[telegram] ✅ Message sent successfully")
+            return True
+        else:
+            print(f"[telegram] ❌ Request failed with status {resp.status_code}")
+            print(f"[telegram] Error response: {resp.text}")
+            return False
     except requests.RequestException as e:
-        print(f"[telegram] Send failed: {e}")
+        print(f"[telegram] ❌ Send failed with exception: {e}")
+        print(f"[telegram] Exception type: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
