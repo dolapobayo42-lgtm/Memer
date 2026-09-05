@@ -119,6 +119,19 @@ async def main():
     print(f"Journal path: {os.path.abspath(journal.JOURNAL_PATH)}")
     print(f"MC band: ${MC_BAND_LOW:.0f}-${MC_BAND_HIGH:.0f}, min age: {STALL_MIN_AGE_HOURS}h")
     print("=" * 50)
+    
+    # Send startup checklist to Telegram
+    startup_msg = (
+        f"✅ Tracker Online\n"
+        f"✓ PumpPortal listener: subscribeNewToken + subscribeMigration\n"
+        f"✓ Journal: {os.path.abspath(journal.JOURNAL_PATH)}\n"
+        f"✓ Market cap band: ${MC_BAND_LOW:.0f}–${MC_BAND_HIGH:.0f}\n"
+        f"✓ Stall check interval: {CHECK_INTERVAL_MINUTES} min\n"
+        f"✓ Min age for check: {STALL_MIN_AGE_HOURS}h\n"
+        f"— Scanning silently, alerts on findings."
+    )
+    send_telegram(startup_msg)
+    
     await asyncio.gather(listen(), periodic_stall_checker())
 
 
