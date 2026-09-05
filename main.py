@@ -4,7 +4,7 @@ import os
 import requests
 import websockets
 
-import journal
+import Journal
 import dexscreener_client as dex
 
 PUMPPORTAL_WS = "wss://pumpportal.fun/api/data"
@@ -43,7 +43,7 @@ def handle_message(msg: dict):
     if msg.get("txType") == "migrate" or "migration" in str(msg.get("method", "")).lower():
         mint = msg.get("mint")
         if mint:
-            journal.mark_bonded(mint)
+            Journal.mark_bonded(mint)
             print(f"[bonded] {mint[:8]}... has migrated/bonded.")
         return
 
@@ -54,7 +54,7 @@ def handle_message(msg: dict):
     if not mint or not deployer:
         return  # silent skip -- NOT printed, this is the fix for the log flood
 
-    journal.log_launch(mint, deployer, name, symbol)  # no print here either
+    Journal.log_launch(mint, deployer, name, symbol)  # no print here either
 
 
 async def listen():
@@ -78,7 +78,7 @@ async def listen():
 
 
 def run_stall_check_cycle():
-    candidates = journal.get_stalled_candidates(min_age_hours=STALL_MIN_AGE_HOURS)
+    candidates = Journal.get_stalled_candidates(min_age_hours=STALL_MIN_AGE_HOURS)
     print(f"[stall-check] {len(candidates)} unbonded launches old enough to check.")
     for row in candidates:
         mc = dex.get_current_market_cap_usd(row["mint"])
@@ -95,7 +95,7 @@ def run_stall_check_cycle():
                 f"-- watch-only, no trade placed."
             )
             send_telegram(alert)
-            journal.mark_alerted(row["mint"], mc)
+            Journal.mark_alerted(row["mint"], mc)
             print(f"  ALERTED: {row['symbol']} at ${mc:.0f} mc.")
         else:
             # Still mark alerted=no (leave as-is) so it gets re-checked next
@@ -116,7 +116,7 @@ async def periodic_stall_checker():
 async def main():
     print("=" * 50)
     print("Stalled Unbonded Survivor Tracker -- starting")
-    print(f"Journal path: {os.path.abspath(journal.JOURNAL_PATH)}")
+    print(f"Journal path: {os.path.abspath(Journal.JOURNAL_PATH)}")
     print(f"MC band: ${MC_BAND_LOW:.0f}-${MC_BAND_HIGH:.0f}, min age: {STALL_MIN_AGE_HOURS}h")
     print("=" * 50)
     
@@ -124,7 +124,7 @@ async def main():
     startup_msg = (
         f"✅ Tracker Online\n"
         f"✓ PumpPortal listener: subscribeNewToken + subscribeMigration\n"
-        f"✓ Journal: {os.path.abspath(journal.JOURNAL_PATH)}\n"
+        f"✓ Journal: {os.path.abspath(Journal.JOURNAL_PATH)}\n"
         f"✓ Market cap band: ${MC_BAND_LOW:.0f}–${MC_BAND_HIGH:.0f}\n"
         f"✓ Stall check interval: {CHECK_INTERVAL_MINUTES} min\n"
         f"✓ Min age for check: {STALL_MIN_AGE_HOURS}h\n"
